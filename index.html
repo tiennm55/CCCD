@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chụp & gửi dữ liệu lên Google Sheet</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+</head>
+<body>
+  <h2>Chụp ảnh, nhận dạng số 12 chữ số</h2>
+
+  <label>Mã khách hàng:</label><br />
+  <input type="text" id="customerCode" placeholder="Nhập mã khách hàng" /><br /><br />
+
+  <video id="video" width="400" height="300" autoplay></video><br />
+
+  <button onclick="captureAndRecognize()">📸 Chụp & Nhận dạng</button><br /><br />
+
+  <label>Số nhận dạng (12 chữ số):</label><br />
+  <input type="text" id="barcodeInput" placeholder="Dãy số sẽ hiện ở đây" size="20" /><br /><br />
+
+  <button onclick="sendData()">📤 Gửi dữ liệu lên Google Sheets</button>
+
+  <p id="result"></p>
+
+  <canvas id="canvas" width="400" height="300" style="display:none;"></canvas>
+
+<script>
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const result = document.getElementById("result");
+
+  const scriptURL = "https://script.google.com/macros/s/AKfycbxlu5lepVmg53drLgjiUY8jlieaXls6yqcUlL7JOP_kYi1NnFMXjRAUOLQ96EstNV0cjg/exec"; // Thay bằng link Web App của bạn
+
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => video.srcObject = stream)
+    .catch(err => alert("Không thể mở camera: " + err));
+
+  async function captureAndRecognize() {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageDataURL = canvas.toDataURL("image/png");
+
+    result.innerText = "⏳ Đang nhận dạng số...";
+
+    const { data: { text } } = await Tesseract.recognize(
+      imageDataURL,
+      'eng',
+      { tessedit_char_whitelist: '0123456789' }
+    );
+
+    const match = text.replace(/\D/g, '').match(/\d{12}/);
+    const barcode = match ? match[0] : "";
+
+    if (!barcode) {
+      result.innerText = "⚠️ Không nhận dạng được dãy số 12 chữ số. Vui lòng thử lại.";
+      return;
+    }
+
+    document.getElementById("barcodeInput").value = barcode;
+    result.innerText = "✅ Nhận dạng thành công! Bạn có thể sửa số nếu muốn.";
+  }
+
+  function sendData() {
+    const customerCode = document.getElementById("customerCode").value.trim();
+    const barcode = document.getElementById("barcodeInput").value.trim();
+
+    if (!customerCode) {
+      alert("Bạn chưa nhập mã khách hàng");
+      return;
+    }
+
+    if (barcode.length !== 12 || !/^\d{12}$/.test(barcode)) {
+      alert("Số nhập không đúng định dạng 12 chữ số");
+      return;
+    }
+
+    result.innerText = "⏳ Đang gửi dữ liệu...";
+
+    fetch(scriptURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerCode,
+        barcode,
+        image: ""  // Nếu bạn muốn gửi ảnh, thay "" bằng imageDataURL
+      })
+    })
+    .then(res => res.text())
+    .then(txt => {
+      result.innerText = `🎉 Gửi thành công! Server trả về: ${txt}`;
+    })
+    .catch(err => {
+      result.innerText = "❌ Gửi thất bại: " + err;
+    });
+  }
+</script>
+</body>
+</html>
